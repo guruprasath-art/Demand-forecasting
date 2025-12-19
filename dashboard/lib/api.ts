@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const apiClient = axios.create({
-  baseURL: "http://localhost:8000",
+  baseURL: "/api",
   timeout: 10000
 });
 
@@ -49,5 +49,3 @@ export async function fetchMetrics(): Promise<MetricsResponse> {
   const res = await apiClient.get<MetricsResponse>("/metrics");
   return res.data;
 }
-
-

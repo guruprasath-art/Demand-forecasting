@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 
-MODEL_PATH = Path("backend/app/models/demand_model.joblib")
+MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "demand_model.joblib"
 
 
 @lru_cache(maxsize=1)

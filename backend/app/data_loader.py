@@ -6,9 +6,14 @@ import pandas as pd
 import yaml
 
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 @lru_cache(maxsize=1)
-def load_config(config_path: str = "backend/configs/model.yaml") -> dict:
-    path = Path(config_path)
+def load_config(config_path: str = None) -> dict:
+    if config_path is None:
+        path = BASE_DIR / "configs" / "model.yaml"
+    else:
+        path = Path(config_path)
     with path.open("r") as f:
         return yaml.safe_load(f)
 
