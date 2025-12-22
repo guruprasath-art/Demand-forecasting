@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from typing import List
 
 from fastapi import FastAPI, HTTPException
@@ -14,6 +15,7 @@ from .schemas import (
     HealthResponse,
     MetricsResponse,
     SKUsResponse,
+    ExecutivePulseResponse,
 )
 
 app = FastAPI(title="Demand Forecasting API", version="1.1.0")
@@ -34,13 +36,31 @@ def health() -> HealthResponse:
 
 @app.get("/skus", response_model=SKUsResponse)
 def get_skus() -> SKUsResponse:
+    # Prefer a live BigQuery-backed SKU list when available to avoid
+    # returning potentially stale values coming from the fallback artifact.
     try:
-        skus = list_skus()
+        from app.data.bigquery_client import list_skus as bq_list_skus
+
+        skus = bq_list_skus()
     except Exception:
-        # If the model artifact or feature data is missing (or imports fail),
-        # return an empty SKU list so the dashboard can still load.
-        skus = []
-    return SKUsResponse(skus=skus)
+        try:
+            # Fall back to the artifact-backed SKU list if BigQuery isn't reachable
+            skus = list_skus()
+        except Exception:
+            skus = []
+
+    # Deduplicate SKUs while preserving order to avoid duplicate option keys
+    try:
+        seen = set()
+        unique = []
+        for s in skus:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+    except Exception:
+        unique = skus
+
+    return SKUsResponse(skus=unique)
 
 
 @app.get("/metrics", response_model=MetricsResponse)
@@ -191,6 +211,28 @@ def get_overview(horizon: int = 14):
         raise HTTPException(status_code=500, detail=f"Overview generation failed: {e}")
 
 
+@app.get("/executive/pulse", response_model=ExecutivePulseResponse)
+def get_executive_pulse(horizon: int = 14):
+    """Return high-level executive KPIs for the dashboard Pulse panel."""
+    try:
+        from app.services.executive import compute_pulse
+
+        return compute_pulse(horizon=horizon)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Executive pulse generation failed: {e}")
+
+
+@app.get("/sku_health")
+def get_sku_health(horizon: int = 14):
+    """Return per-SKU health metrics for the dashboard to consume."""
+    try:
+        from app.services.overview import compute_sku_health
+
+        return compute_sku_health(horizon=horizon)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SKU health generation failed: {e}")
+
+
 @app.post("/train")
 def trigger_training():
     """Trigger a short training run in the background and return immediately.
@@ -204,11 +246,18 @@ def trigger_training():
 
         repo_dir = Path(__file__).resolve().parent
         script = repo_dir / "training" / "run_train_short.py"
+        # Use repository root (parent of `app`) as working directory so
+        # `app` is importable when the training script spawns as a subprocess.
+        repo_root = repo_dir.parent
         if not script.exists():
             raise HTTPException(status_code=404, detail="Training script not found")
 
         # Spawn detached background process so the request returns quickly.
-        subprocess.Popen([sys.executable, str(script)], cwd=str(repo_dir))
+        env = dict(**os.environ)
+        # Ensure the training subprocess can import the `app` package by
+        # setting PYTHONPATH to the repository root.
+        env["PYTHONPATH"] = str(repo_root)
+        subprocess.Popen([sys.executable, str(script)], cwd=str(repo_root), env=env)
         return {"status": "started"}
     except HTTPException:
         raise

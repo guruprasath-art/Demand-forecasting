@@ -29,3 +29,20 @@ class SKUsResponse(BaseModel):
     skus: List[str]
 
 
+class ExecutivePulsePoint(BaseModel):
+    date: str
+    actual: Optional[float]
+    forecast: Optional[float]
+
+
+class ExecutivePulseResponse(BaseModel):
+    total_forecast_units: float
+    total_forecast_value: float
+    inventory_health_score: float
+    projected_stockout_count: int
+    projected_stockout_value: float
+    excess_capital_value: float
+    actual_series: List[ExecutivePulsePoint]
+    predicted_series: List[ExecutivePulsePoint]
+
+

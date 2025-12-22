@@ -16,7 +16,7 @@ const items = [
   "Settings & Access Control",
 ];
 
-export function Sidebar() {
+export function Sidebar({ onSelect }: { onSelect?: (item: string) => void }) {
   return (
     <aside className="w-64 bg-slate-900 text-slate-200 min-h-screen p-4">
       <div className="mb-6 flex items-center gap-3">
@@ -29,13 +29,21 @@ export function Sidebar() {
 
       <nav className="space-y-1 text-sm">
         {items.map((it) => (
-          <Link key={it} href="#" className="flex items-center gap-3 p-2 rounded hover:bg-slate-800">
+          <a
+            key={it}
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              onSelect?.(it);
+            }}
+            className="flex items-center gap-3 p-2 rounded hover:bg-slate-800"
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-slate-300">
               <rect x="3" y="3" width="7" height="7" stroke="currentColor" strokeWidth="1.2" />
               <rect x="14" y="3" width="7" height="7" stroke="currentColor" strokeWidth="1.2" />
             </svg>
             <span>{it}</span>
-          </Link>
+          </a>
         ))}
       </nav>
     </aside>

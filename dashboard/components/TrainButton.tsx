@@ -10,10 +10,13 @@ export function TrainButton() {
   async function handleTrain() {
     setLoading(true);
     setMessage(null);
+    console.log("TrainButton: clicked start training");
     try {
       const res = await startTraining();
+      console.log("TrainButton: training API response", res);
       setMessage(res?.status ?? "Training started.");
     } catch (e: any) {
+      console.error("TrainButton: training error", e);
       setMessage(
         e?.response?.data?.detail ??
           "Training endpoint not available. Run training via the backend scripts."

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchForecast, fetchMetrics, fetchSKUs } from "../lib/api";
 import type { ForecastPoint, MetricsResponse } from "../lib/api";
 import { KPI } from "./KPI";
-import { SKUSelector } from "./SKUSelector";
+// SKUSelector removed — selection comes from SKUHealthPanel
 import { HorizonSelector } from "./HorizonSelector";
 import { ForecastChart } from "./ForecastChart";
 import { SummaryPanel } from "./SummaryPanel";
@@ -15,8 +15,12 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { Card } from "./Card";
 import { OverviewPanel } from "./OverviewPanel";
+import { ExecutivePulse } from "./ExecutivePulse";
+import { SKUHealthPanel } from "./SKUHealthPanel";
+import { StorePerformance } from "./StorePerformance";
 
 export default function DashboardClient() {
+  const [activePanel, setActivePanel] = useState<string>("Overview");
   const [skus, setSkus] = useState<string[]>([]);
   const [selectedSKU, setSelectedSKU] = useState<string | null>(null);
   const [horizon, setHorizon] = useState<number>(14);
@@ -37,9 +41,10 @@ export default function DashboardClient() {
           fetchSKUs(),
           fetchMetrics().catch(() => null)
         ]);
-        setSkus(skuList);
-        if (skuList.length > 0) {
-          setSelectedSKU(skuList[0]);
+        const uniqueSkus = Array.from(new Set(skuList || []));
+        setSkus(uniqueSkus);
+        if (uniqueSkus.length > 0) {
+          setSelectedSKU(uniqueSkus[0]);
         }
         if (metricData) {
           setMetrics(metricData);
@@ -87,21 +92,34 @@ export default function DashboardClient() {
 
   return (
     <div className="flex h-screen bg-slate-900 text-slate-100">
-      <Sidebar />
+      <Sidebar onSelect={setActivePanel} />
       <div className="flex-1 flex flex-col">
-        <TopBar />
+        <TopBar stores={skus} selectedStore={selectedSKU} onChange={setSelectedSKU} />
         <main className="p-6 overflow-auto">
           <section className="grid gap-4 md:grid-cols-3">
             <div className="md:col-span-2">
-              <OverviewPanel horizon={horizon} />
+              <div className="space-y-4">
+                {activePanel === "Overview" && (
+                  <>
+                    <ExecutivePulse horizon={horizon} />
+                    <SKUHealthPanel onSelect={setSelectedSKU} />
+                    <OverviewPanel horizon={horizon} />
+                  </>
+                )}
+                {activePanel === "Store Performance" && <StorePerformance horizon={horizon} />}
+                {activePanel === "Product Demand" && (
+                  <>
+                    <SKUHealthPanel onSelect={setSelectedSKU} />
+                  </>
+                )}
+                {activePanel === "Forecasting" && (
+                  <>
+                    <ExecutivePulse horizon={horizon} />
+                  </>
+                )}
+              </div>
             </div>
             <div>
-              <SKUSelector
-                skus={skus}
-                value={selectedSKU}
-                onChange={setSelectedSKU}
-                disabled={loadingInitial}
-              />
               <HorizonSelector value={horizon} onChange={setHorizon} />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <KPI
@@ -156,6 +174,7 @@ export default function DashboardClient() {
               <ModelStatus />
               <TrainButton />
               <SummaryPanel sku={selectedSKU} horizon={horizon} />
+              <SKUHealthPanel />
               <Card title="Status">
                 {loadingInitial ? (
                   <p className="text-sm text-slate-400">

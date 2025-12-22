@@ -95,3 +95,38 @@ def compute_overview(horizon: int = 14) -> Dict[str, Any]:
         "actual_series": actual_series,
         "predicted_series": predicted_series,
     }
+
+
+def compute_sku_health(horizon: int = 14, low_threshold: float = 1.0) -> Dict[str, Any]:
+    """Return per-SKU health metrics and simple status flags.
+
+    The response contains a list of SKUs with `sku`, `avg`, `std`,
+    `volatility` and a `status` string ("low" | "sufficient").
+    """
+    artifact = load_artifact()
+    history_df: pd.DataFrame = artifact["history_df"].copy()
+
+    if history_df.empty:
+        return {"skus": []}
+
+    history_df["date"] = pd.to_datetime(history_df["date"])
+    end = history_df["date"].max()
+    start = end - pd.Timedelta(days=90)
+    recent = history_df[history_df["date"] >= start]
+
+    sku_stats = recent.groupby("sku").agg(
+        avg=("total_quantity", "mean"),
+        std=("total_quantity", "std"),
+    )
+    sku_stats["std"] = sku_stats["std"].fillna(0)
+    sku_stats["volatility"] = (sku_stats["std"] / (sku_stats["avg"] + 1e-9)).replace([np.inf, -np.inf], 0).fillna(0)
+
+    rows = []
+    for sku, row in sku_stats.iterrows():
+        avg = float(row["avg"])
+        std = float(row["std"])
+        vol = float(row["volatility"])
+        status = "low" if avg < low_threshold else "sufficient"
+        rows.append({"sku": sku, "avg": avg, "std": std, "volatility": vol, "status": status})
+
+    return {"skus": rows}

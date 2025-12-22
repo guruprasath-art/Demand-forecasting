@@ -13,10 +13,13 @@ export function SummaryPanel({ sku, horizon }: { sku: string | null; horizon: nu
     setLoading(true);
     setError(null);
     setSummary(null);
+    console.log("SummaryPanel: generate clicked", sku, horizon);
     try {
       const s = await fetchSummary(sku, horizon);
+      console.log("SummaryPanel: summary fetched", s?.slice?.(0, 120));
       setSummary(s);
     } catch (e: any) {
+      console.error("SummaryPanel: summary error", e);
       setError(e?.response?.data?.detail ?? String(e));
     } finally {
       setLoading(false);

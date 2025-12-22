@@ -5,7 +5,8 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/:path*',
+        // Backend is running on port 8001 in this environment.
+        destination: 'http://localhost:8001/:path*',
       },
     ];
   },

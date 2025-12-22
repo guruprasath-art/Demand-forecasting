@@ -87,7 +87,8 @@ def fetch_daily_demand(
     df = job.result().to_dataframe()
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"])
-        df["sku"] = df["sku"].astype(str)
+        # Sanitize SKU strings: trim whitespace and remove surrounding brackets
+        df["sku"] = df["sku"].astype(str).str.strip().str.strip("[]")
         df["total_quantity"] = df["total_quantity"].astype(float)
     return df
 
@@ -210,7 +211,8 @@ def fetch_demand_with_context(
     df = job.result().to_dataframe()
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"])
-        df["sku"] = df["sku"].astype(str)
+        # Sanitize SKU strings coming from various tables
+        df["sku"] = df["sku"].astype(str).str.strip().str.strip("[]")
         df["total_quantity"] = df["total_quantity"].astype(float)
         if "event_count" in df.columns:
             df["event_count"] = df["event_count"].fillna(0.0).astype(float)
@@ -241,6 +243,8 @@ def list_skus() -> list[str]:
     df = job.result().to_dataframe()
     if df.empty:
         return []
-    return df["sku"].astype(str).tolist()
+    # Clean SKUs before returning
+    skus = df["sku"].astype(str).str.strip().str.strip("[]")
+    return skus.tolist()
 
 
