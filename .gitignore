@@ -1,0 +1,46 @@
+# =========================
+# Node / Next.js
+# =========================
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+
+# Logs
+*.log
+next_dev_stdout.log
+next_dev_stderr.log
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyd
+*.joblib
+
+# Virtual Environments
+venv/
+env/
+.venv/
+venv310/
+**/venv310/
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+
+# =========================
+# Build / Dist
+# =========================
+dist/
+build/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db

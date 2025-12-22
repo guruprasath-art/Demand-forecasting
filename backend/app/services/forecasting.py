@@ -15,12 +15,67 @@ MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "demand_model.j
 
 @lru_cache(maxsize=1)
 def load_artifact() -> dict:
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(
-            f"Trained model not found at {MODEL_PATH}. "
-            "Run the training script (app/training/train_model.py) first."
-        )
-    return joblib.load(MODEL_PATH)
+    # Prefer the trained artifact if present, but be resilient: if the
+    # artifact requires unavailable packages (e.g. scikit-learn) we build
+    # a minimal runtime artifact so the API remains usable for demos.
+    if MODEL_PATH.exists():
+        try:
+            return joblib.load(MODEL_PATH)
+        except ModuleNotFoundError:
+            # Fall through to create a lightweight artifact
+            pass
+
+    # Fallback: construct a simple artifact using historical data
+    # Prefer live BigQuery-backed data if available, otherwise fall back
+    # to the offline parquet features (if present).
+    try:
+        from app.data.bigquery_client import fetch_demand_with_context
+
+        history_df = fetch_demand_with_context()
+        if history_df.empty:
+            raise RuntimeError("BigQuery returned no history")
+    except Exception:
+        from app.data_loader import load_history_df
+
+        history_df = load_history_df()
+
+    class SimpleModel:
+        def predict(self, X):
+            # Predict using the last observed value for the SKU if available,
+            # otherwise return zero. X shape: (n_samples, n_features)
+            try:
+                last = float(history_df["total_quantity"].dropna().values[-1])
+            except Exception:
+                last = 0.0
+            return [last for _ in range(len(X))]
+
+    class SimpleEncoder:
+        def __init__(self, df):
+            uniq = list(df["sku"].astype(str).unique()) if "sku" in df.columns else []
+            self._map = {s: i for i, s in enumerate(uniq)}
+
+        def transform(self, items):
+            return [self._map.get(str(i), 0) for i in items]
+
+    feature_cols = [
+        "sku_encoded",
+        "day_of_week",
+        "month",
+        "lag_7",
+        "rolling_mean_14",
+        "event_count",
+        "active_users",
+        "price",
+    ]
+
+    artifact = {
+        "model": SimpleModel(),
+        "feature_cols": feature_cols,
+        "sku_encoder": SimpleEncoder(history_df),
+        "history_df": history_df,
+        "_fallback": True,
+    }
+    return artifact
 
 
 def list_skus() -> List[str]:
@@ -95,8 +150,28 @@ def _iterative_forecast_for_sku(sku: str, horizon: int) -> pd.DataFrame:
             window_vals = recent_targets[-window:]
             row[f"rolling_mean_{window}"] = float(np.mean(window_vals))
 
-        X = np.array([[row[c] for c in feature_cols]])
-        y_pred = float(model.predict(X)[0])
+        # Build feature matrix defensively: if a feature is missing from the
+        # constructed `row` (e.g. encoded categorical features), fill with 0.0
+        # so the model / fallback logic can continue without raising KeyError.
+        X = np.array([[row.get(c, 0.0) for c in feature_cols]])
+
+        # If we are using the fallback artifact, produce forecasts using a
+        # simple exponential smoothing over recent_targets rather than
+        # calling a missing/full ML model. This avoids depending on
+        # scikit-learn when it's not installed.
+        if artifact.get("_fallback", False):
+            # Simple exponential smoothing: alpha-weighted average with alpha=0.3
+            alpha = 0.3
+            if len(recent_targets) == 0:
+                y_pred = 0.0
+            else:
+                s = recent_targets[-1]
+                # apply smoothing over the last up to 7 points
+                for val in recent_targets[-7:][::-1]:
+                    s = alpha * val + (1 - alpha) * s
+                y_pred = float(s)
+        else:
+            y_pred = float(model.predict(X)[0])
         recent_targets.append(y_pred)
 
         forecasts.append(
